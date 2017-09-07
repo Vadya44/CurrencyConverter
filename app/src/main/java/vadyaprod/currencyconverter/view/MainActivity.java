@@ -10,90 +10,121 @@ import java.net.URLConnection;
 import java.util.ArrayList;
 import java.util.List;
 
-import android.telecom.Connection;
 import android.util.Log;
 import android.view.View;
 import android.view.View.OnClickListener;
 import android.widget.ArrayAdapter;
 import android.widget.Button;
+import android.widget.EditText;
 import android.widget.Spinner;
+import android.widget.TextView;
 import android.widget.Toast;
+import java.net.InetAddress;
 
-import org.simpleframework.xml.Serializer;
-import org.simpleframework.xml.core.Persister;
-
+import android.net.ConnectivityManager;
 import java.io.*;
 import vadyaprod.currencyconverter.model.CurrencyList;
+import vadyaprod.currencyconverter.model.Valute;
 import vadyaprod.currencyconverter.other.Parser;
 import vadyaprod.currencyconverter.R;
 
-public class MainActivity extends AppCompatActivity {
+public class MainActivity extends AppCompatActivity implements MainView {
 
-    private String filePath = getApplicationContext().getFilesDir().getPath().toString() + "/cacheXML.xml";
+    private String filePath;
     private Spinner spinnerFrom, spinnerTo;
-    private Button btn;
+    private List<Valute> valuteslist;
 
+    /**
+     * Downloading xml file (if we can)
+     * If we can't - will be used file from cache
+     */
     public void downloadFile() {
-        final Context context = this.getApplicationContext();
-        Thread thread = new Thread(new Runnable() {
+        filePath = "cacheXML.xml";
+        if (!isInternetAvailable())
+            downloadFailed();
+            Thread thread = new Thread(new Runnable() {
 
-            @Override
-            public void run() {
-                try {
-            URL url = new URL("http://www.cbr.ru/scripts/XML_daily.asp");
-            File file = new File(context.getCacheDir(),filePath);
-                URLConnection connection = new URL("http://www.cbr.ru/scripts/XML_daily.asp").openConnection();
-                connection.connect();
-                InputStream stream = connection.getInputStream();
-                if (stream == null) {
-                    Log.e("mad", "Unable to create InputStream for mediaUrl: "+url);
-                }
-                FileOutputStream fos = new FileOutputStream(file);
+                @Override
+                public void run() {
+                    try {
+                        URL url = new URL("http://www.cbr.ru/scripts/XML_daily.asp");
+                        URLConnection connection = new URL("http://www.cbr.ru/scripts/XML_daily.asp").openConnection();
+                        connection.connect();
+                        InputStream stream = connection.getInputStream();
+                        if (stream == null) {
+                            Log.e("mad", "Unable to create InputStream for mediaUrl: " + url);
+                        }
+                        FileOutputStream fos = openFileOutput(filePath, Context.MODE_PRIVATE);
 
-                byte buf[] = new byte[16 * 1024];
-                do {
-                    int numread = stream.read(buf);
-                    if (numread <= 0) {
-                        break;
-                    } else {
-                        fos.write(numread);
+                        byte buf[] = new byte[16 * 1024];
+                        do {
+                            int numread = stream.read(buf);
+                            if (numread <= 0) {
+                                break;
+                            } else {
+                                fos.write(numread);
+                            }
+                        } while (true);
+                        fos.close();
+                    } catch (Exception e) {
+                        Log.v("parser", e.toString() + Thread.currentThread().getStackTrace()[2].getLineNumber());
                     }
-                } while (true);
-                fos.close();
-        } catch (Exception e) {
-            Log.v("parser", e.toString() + Thread.currentThread().getStackTrace()[2].getLineNumber());
-        }
-            }
-        });
+                }
+            });
 
-        thread.start();
+
+            thread.start();
+
     }
 
+    public boolean isInternetAvailable() {
+        final ConnectivityManager connectivityManager = ((ConnectivityManager) this.getSystemService(Context.CONNECTIVITY_SERVICE));
+        return connectivityManager.getActiveNetworkInfo() != null && connectivityManager.getActiveNetworkInfo().isConnected();
+    }
+
+    /**
+     * Getting last downloaded file
+     * @return xml file with values of valutes
+     */
     private File getFileFromDir() {
-        File file = new File(this.getApplicationContext().getFilesDir(), filePath);
-        return file;
+        return new File(MainActivity.this.getCacheDir(), filePath);
     }
+
+
+    /**
+     * Message about fail
+     */
+    private void downloadFailed() {
+        Toast toast = Toast.makeText(getApplicationContext(), "Failed to upload data", Toast.LENGTH_LONG);
+        toast.show();
+    }
+
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_main);
+        generateValutes();
         addItemsOnSpinnerFrom();
         addItemsOnSpinnerTo();
         addListenerOnButton();
         downloadFile();
-        Parser parser = new Parser();
-        CurrencyList list = parser.getCurrencyList(getFileFromDir());
-        Log.v("list", list.getCurrencies().toString());
+
+        //Parser parser = new Parser();
+        //CurrencyList list = parser.getCurrencyList(getFileFromDir());
+        //Log.v("list", list.getCurrencies().toString());
     }
 
+    /**
+     * Spinner
+     */
     public void addItemsOnSpinnerFrom() {
-
         spinnerFrom = findViewById(R.id.first_currency_name);
         List<String> list = new ArrayList<String>();
-        list.add("list 1list2list3");
-        list.add("list 2list3");
-        list.add("list 3");
+        for (Valute v : valuteslist)
+        {
+            list.add(v.getCharCode());
+        }
         ArrayAdapter<String> dataAdapter = new ArrayAdapter<String>(this,
                 android.R.layout.simple_spinner_item, list);
         dataAdapter.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item);
@@ -101,35 +132,109 @@ public class MainActivity extends AppCompatActivity {
     }
 
 
+    /**
+     * Spinner
+     */
     public void addItemsOnSpinnerTo() {
-
         spinnerTo = findViewById(R.id.second_currency_name);
         List<String> list = new ArrayList<String>();
-        list.add("list 1list2list3");
-        list.add("list 2list3");
-        list.add("list 3");
+        for (Valute v : valuteslist)
+        {
+            list.add(v.getCharCode());
+        }
         ArrayAdapter<String> dataAdapter = new ArrayAdapter<String>(this,
                 android.R.layout.simple_spinner_item, list);
         dataAdapter.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item);
         spinnerTo.setAdapter(dataAdapter);
     }
 
-    public void addListenerOnButton() {
 
-        btn = findViewById(R.id.button_convert);
+    /**
+     * Clicking for convert button
+     */
+    public void addListenerOnButton() {
+        Button btn = findViewById(R.id.button_convert);
         btn.setOnClickListener(new OnClickListener() {
 
             @Override
             public void onClick(View v) {
 
-                Toast.makeText(MainActivity.this,
-                        "OnClickListener : " +
-                                "\nSpinner 1 : "+ String.valueOf(spinnerFrom.getSelectedItem()) +
-                                "\nSpinner 2 : "+ String.valueOf(spinnerTo.getSelectedItem()),
-                        Toast.LENGTH_SHORT).show();
+                solveResult();
             }
 
         });
     }
 
+    /**
+     * Result showing method
+     * @param stringRes - string for showing
+     */
+    public void showResult(String stringRes) {
+        TextView textViewResult = findViewById(R.id.text_result);
+        textViewResult.setText(stringRes);
+    }
+
+    /**
+     * Counting result value in second valute
+     */
+    public void solveResult(){
+        String result = "";
+        double firstnum = getFirstNumber();
+        double firstCurrency = getFirstValue();
+        double secondCurrency = getSecondValue();
+        Double dResult = firstnum * secondCurrency / firstCurrency;
+        result = String.format("%.3f%n", dResult);
+        showResult(result);
+    }
+
+    /**
+     *
+     * @return inputed value for convertation
+     */
+    public double getFirstNumber() {
+        EditText editText = findViewById(R.id.first_currency_number);
+        return Double.parseDouble(editText.getText().toString());
+    }
+
+
+    /**
+     *
+     * @return value of first choosed valute
+     */
+    public double getFirstValue() {
+        String charCode = spinnerFrom.getSelectedItem().toString();
+        for (Valute v : valuteslist)
+        {
+            if (v.getCharCode().equals(charCode))
+                return v.getValue();
+        }
+        return 0.0;
+    }
+
+    /**
+     *
+     * @return value of second choosed valute
+     */
+    public double getSecondValue() {
+        String charCode = spinnerTo.getSelectedItem().toString();
+        for (Valute v : valuteslist)
+        {
+            if (v.getCharCode().equals(charCode))
+                return v.getValue();
+        }
+        return 0.0;
+    }
+
+    /**
+     * Generating Valutes for testing application
+     */
+    public void generateValutes(){
+        valuteslist = new ArrayList<Valute>();
+        Valute usd = new Valute("USD", 60.0);
+        Valute euro = new Valute("EURO", 70.1);
+        Valute gbp = new Valute("GBP", 74.7);
+        valuteslist.add(usd);
+        valuteslist.add(euro);
+        valuteslist.add(gbp);
+    }
 }

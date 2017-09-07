@@ -23,6 +23,10 @@ public class Parser {
         currencyList = null;
     }
 
+    /**
+     * Parsing file from parameters
+     * @param file - xml file for parsing
+     */
     private void Parse(File file) {
         try {
             Serializer ser = new Persister();
@@ -33,6 +37,11 @@ public class Parser {
 
     }
 
+    /**
+     * Getting final list
+     * @param file - xml file for parsing
+     * @return
+     */
     public CurrencyList getCurrencyList(File file)
     {
         Parse(file);
